@@ -6,6 +6,7 @@
 #
 """Unit tests for SingularityExecutor."""
 
+import asyncio
 import shlex
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -15,11 +16,14 @@ from horus_builtin.artifact.file import FileArtifact
 from horus_builtin.runtime.command import CommandRuntime
 from horus_builtin.task.horus_task import HorusTask
 from horus_runtime.context import HorusContext
+from horus_runtime.core.executor.base import BaseExecutor
 from horus_runtime.core.task.exceptions import TaskExecutionError
+from horus_runtime.settings import runtime_settings
 
 from horus_singularity.executor.singularity import SingularityExecutor
 
 _IMAGE = "/opt/images/boltz.sif"
+_WORKDIR = "/work"
 
 
 def _make_mock_proc(
@@ -40,7 +44,30 @@ def _make_mock_target(proc: AsyncMock | None = None) -> MagicMock:
     target.run_command = AsyncMock(return_value=proc or _make_mock_proc())
     target.put_file = AsyncMock()
     target.mkdir = AsyncMock()
+    target.resolved_working_directory = _WORKDIR
+    # Mirror LocalTarget.path_on_target so `${id}` substitution (used by the
+    # binds/env/working_dir tests) resolves to the artifact's real path
+    # instead of a MagicMock repr.
+    target.path_on_target = lambda artifact: str(artifact.path)
     return target
+
+
+@pytest.mark.unit
+class TestSingularityExecutorRegistration:
+    """Verify SingularityExecutor registers via the horus.executor group."""
+
+    def test_registered_under_kind(self) -> None:
+        """SingularityExecutor must appear in BaseExecutor.registry."""
+        assert "singularity" in BaseExecutor.registry
+        assert BaseExecutor.registry["singularity"] is SingularityExecutor
+
+    def test_kind_field(self) -> None:
+        """The kind field must equal 'singularity'."""
+        assert SingularityExecutor(image=_IMAGE).kind == "singularity"
+
+    def test_runtimes_filter(self) -> None:
+        """CommandRuntime must be the accepted runtime type."""
+        assert CommandRuntime in SingularityExecutor.runtimes
 
 
 @pytest.mark.unit
@@ -162,6 +189,135 @@ class TestSingularityExecutorExecute:
                 TaskExecutionError, match="Container exited with code 1"
             ):
                 await executor._execute(task)
+
+    @pytest.mark.asyncio
+    async def test_placeholders_substituted_in_binds_env_and_pwd(
+        self, horus_context: HorusContext
+    ) -> None:
+        """binds, env and working_dir must render ${artifact} placeholders."""
+        del horus_context
+        executor = SingularityExecutor(
+            image=_IMAGE,
+            binds={"${inp}": "/data/protein.pdb"},
+            env={"OUT_PATH": "${out}"},
+            working_dir="${inp.path}",
+        )
+        task = self._make_task(executor, command="true", artifacts=True)
+        mock_target = _make_mock_target()
+        with patch.object(task, "target", mock_target):
+            await executor._execute(task)
+        cmd = mock_target.run_command.call_args[0][0]
+        assert "/data/results/in.pdb:/data/protein.pdb" in cmd
+        assert "OUT_PATH=/data/results/out.pdb" in cmd
+        assert "--pwd /data/results/in.pdb" in cmd
+
+    @pytest.mark.asyncio
+    async def test_side_artifacts_dir_bound_and_exported(
+        self, horus_context: HorusContext
+    ) -> None:
+        """
+        The side-artifacts dir must be bound at its own path and exported
+        inside the container, or the runtime collects nothing.
+        """
+        del horus_context
+        executor = SingularityExecutor(image=_IMAGE)
+        task = self._make_task(executor, command="true", artifacts=True)
+        mock_target = _make_mock_target()
+        with patch.object(task, "target", mock_target):
+            await executor._execute(task)
+            # Read inside the patch: side_artifacts_dir derives from the
+            # target's working directory, so it changes once the patch exits.
+            side_dir = task.side_artifacts_dir
+        cmd = mock_target.run_command.call_args[0][0]
+        assert f"{side_dir}:{side_dir}" in cmd
+        assert f"{runtime_settings.SIDE_ARTIFACTS_DIR_ENV}={side_dir}" in cmd
+
+    @pytest.mark.asyncio
+    async def test_side_artifacts_env_passed_to_run_command(
+        self, horus_context: HorusContext
+    ) -> None:
+        """The host process must also receive the side-artifacts env var."""
+        del horus_context
+        executor = SingularityExecutor(image=_IMAGE)
+        task = self._make_task(executor, command="true", artifacts=True)
+        mock_target = _make_mock_target()
+        with patch.object(task, "target", mock_target):
+            await executor._execute(task)
+            side_dir = task.side_artifacts_dir
+        env = mock_target.run_command.call_args.kwargs["env"]
+        assert env[runtime_settings.SIDE_ARTIFACTS_DIR_ENV] == side_dir
+
+    @pytest.mark.asyncio
+    async def test_explicit_env_wins_over_side_artifacts_default(
+        self, horus_context: HorusContext
+    ) -> None:
+        """A user-set side-artifacts env var must not be overwritten."""
+        del horus_context
+        executor = SingularityExecutor(
+            image=_IMAGE,
+            env={runtime_settings.SIDE_ARTIFACTS_DIR_ENV: "/custom/side"},
+        )
+        task = self._make_task(executor, command="true", artifacts=True)
+        mock_target = _make_mock_target()
+        with patch.object(task, "target", mock_target):
+            await executor._execute(task)
+        cmd = mock_target.run_command.call_args[0][0]
+        assert f"{runtime_settings.SIDE_ARTIFACTS_DIR_ENV}=/custom/side" in cmd
+
+    @pytest.mark.asyncio
+    async def test_non_command_runtime_rejected(
+        self, horus_context: HorusContext
+    ) -> None:
+        """A runtime that is not a CommandRuntime must be refused."""
+        del horus_context
+        executor = SingularityExecutor(image=_IMAGE)
+        task = self._make_task(executor, command="true")
+        with patch.object(task, "runtime", MagicMock()):
+            with pytest.raises(
+                TaskExecutionError, match="only supports CommandRuntime"
+            ):
+                await executor._execute(task)
+
+    @pytest.mark.asyncio
+    async def test_stdout_and_stderr_are_logged(
+        self, horus_context: HorusContext
+    ) -> None:
+        """Container stdout goes to INFO and stderr to WARNING."""
+        del horus_context
+        executor = SingularityExecutor(image=_IMAGE)
+        task = self._make_task(executor, command="true")
+        mock_target = _make_mock_target(
+            _make_mock_proc(stdout=b"hello\n", stderr=b"careful\n")
+        )
+        with patch.object(task, "target", mock_target):
+            with patch(
+                "horus_singularity.executor.singularity.horus_logger"
+            ) as logger:
+                await executor._execute(task)
+        logger.log.info.assert_called_once_with("hello")
+        logger.log.warning.assert_called_once_with("careful")
+
+    @pytest.mark.asyncio
+    async def test_cancelled_execution_kills_and_clears_proc(
+        self, horus_context: HorusContext
+    ) -> None:
+        """
+        A cancellation must kill the process and still clear ``_proc``.
+
+        Regression guard: the try/finally originally wrapped only the
+        return-code check, leaving a dead handle behind on this path.
+        """
+        del horus_context
+        executor = SingularityExecutor(image=_IMAGE)
+        task = self._make_task(executor, command="true")
+        proc = _make_mock_proc()
+        proc.communicate = AsyncMock(side_effect=asyncio.CancelledError)
+        mock_target = _make_mock_target(proc)
+        with patch.object(task, "target", mock_target):
+            with pytest.raises(asyncio.CancelledError):
+                await executor._execute(task)
+        proc.kill.assert_called_once()
+        assert executor._proc is None
 
     @pytest.mark.asyncio
     async def test_cancel_execution_kills_running_process(
