@@ -52,11 +52,21 @@ Registered under `kind = "singularity"`. Only accepted when the task's runtime i
 |---|---|---|---|
 | `image` | `str` | required | Path to the `.sif` image on the target (e.g. `/opt/images/boltz.sif`) |
 | `exe` | `str` | `"singularity"` | Container CLI to invoke — `singularity` or `apptainer` |
-| `binds` | `dict[str, str]` | `{}` | Bind mounts as `host_path → container_path` |
+| `binds` | `dict[str, str]` | `{}` | Bind mounts as `host_path → container_path`; both sides accept `${artifact}` placeholders |
 | `nv` | `bool` | `False` | Add `--nv` to expose the NVIDIA driver stack inside the container |
-| `env` | `dict[str, str]` | `{}` | Environment variables set with `--env NAME=value` |
-| `working_dir` | `str \| None` | `None` | Working directory inside the container (`--pwd`) |
+| `env` | `dict[str, str]` | `{}` | Environment variables set with `--env NAME=value`; accepts `${artifact}` placeholders |
+| `working_dir` | `str \| None` | `None` | Working directory inside the container (`--pwd`); accepts `${artifact}` placeholders |
 | `extra_args` | `list[str]` | `[]` | Extra flags passed verbatim before the image path |
+
+`binds`, `env`, and `working_dir` are rendered with the same `$id` / `${id}` /
+`${id.attr}` / `${task.attr}` substitution as a `command` string (see
+`horus_builtin.runtime.substitution`), so an explicit bind can reference the
+task's own artifacts:
+
+```yaml
+binds:
+  "${protein}": /data/protein.pdb
+```
 
 ### Behaviour
 
@@ -66,10 +76,25 @@ Registered under `kind = "singularity"`. Only accepted when the task's runtime i
    <exe> exec [--nv] [--env K=V]… [--bind host:container]… [--pwd dir] [extra_args…] <image> /bin/sh -c <command>
    ```
    Every interpolated value is passed through `shlex.quote`.
-3. The parent directory of every task input/output artifact is auto-bound at the same path inside the container (`host_dir → host_dir`). Explicit `binds` entries win on conflict.
-4. The command runs on the task target via `target.run_command(...)`; stdout is logged at `INFO`, stderr at `WARNING`.
-5. A non-zero exit code raises `TaskExecutionError`.
-6. `cancel_execution()` kills the still-running process (Singularity has no daemon-side container name to `stop`), and is a safe no-op otherwise.
+3. The parent directory of every task input/output artifact is auto-bound at the same path inside the container (`host_dir → host_dir`), as is `task.side_artifacts_dir`. Explicit `binds` entries win on conflict.
+4. `HORUS_SIDE_ARTIFACTS_DIR` is set both inside the container and on the host process, so scripts can drop side products where the runtime collects them.
+5. The command runs on the task target via `target.run_command(...)`; stdout is logged at `INFO`, stderr at `WARNING`.
+6. A non-zero exit code raises `TaskExecutionError`.
+7. `cancel_execution()` kills the still-running process (Singularity has no daemon-side container name to `stop`), and is a safe no-op otherwise.
+
+Singularity performs **no path translation**: a host path is visible inside the
+container at the same location unless you bind it elsewhere. That is why the
+identity auto-binds let a command use `${artifact}` unchanged — and why porting
+a workflow from `horus-docker` usually means *deleting* the path-rewriting, not
+translating it.
+
+### Resource measurement
+
+`SingularityExecutor` deliberately does **not** override
+`BaseExecutor.resource_scope`, and contributes no `horus.resource_probe` entry
+point. `horus-docker` has to, because `docker run` is a thin client and the
+workload is reparented under the daemon. `singularity exec` *is* the workload's
+process, so the inherited `ProcessTreeScope` already measures the right tree.
 
 ---
 
@@ -79,7 +104,7 @@ Registered under `kind = "singularity"`. Only accepted when the task's runtime i
 
 - Python ≥ 3.13
 - `singularity` or `apptainer` available on the target
-- `horus-runtime` ≥ 0.2.0
+- `horus-runtime` ≥ 0.3.0
 
 ### Setup
 
