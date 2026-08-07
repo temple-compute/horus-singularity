@@ -212,6 +212,30 @@ class TestSingularityExecutorExecute:
         assert "--pwd /data/results/in.pdb" in cmd
 
     @pytest.mark.asyncio
+    async def test_image_path_is_substituted(
+        self, horus_context: HorusContext
+    ) -> None:
+        """
+        `image` must render placeholders: a Singularity image is a file, so it
+        can be declared as a workflow artifact (unlike a Docker registry tag).
+        """
+        del horus_context
+        executor = SingularityExecutor(image="${inp}")
+        task = self._make_task(executor, command="true", artifacts=True)
+        mock_target = _make_mock_target()
+        with patch.object(task, "target", mock_target):
+            await executor._execute(task)
+        cmd = mock_target.run_command.call_args[0][0]
+        parts = shlex.split(cmd)
+        assert parts[-4] == "/data/results/in.pdb"
+        assert "${inp}" not in cmd
+
+    def test_literal_image_path_is_untouched(self) -> None:
+        """A plain path with no placeholder must pass through unchanged."""
+        cmd = SingularityExecutor(image=_IMAGE)._singularity_exec_cmd("true")
+        assert shlex.split(cmd)[-4] == _IMAGE
+
+    @pytest.mark.asyncio
     async def test_side_artifacts_dir_bound_and_exported(
         self, horus_context: HorusContext
     ) -> None:

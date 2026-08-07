@@ -52,6 +52,17 @@ class SingularityExecutor(BaseExecutor):
     Path to the ``.sif`` image file on the target (e.g.
     ``/opt/images/boltz.sif``).  Unlike Docker there is no build step: the
     image must already exist on the target.
+
+    Supports artifact substitution (see :attr:`binds`). This is the important
+    difference from ``horus-docker``'s ``image``, which is a registry tag and
+    so has nothing to substitute: a Singularity image is an ordinary file, so
+    it can be declared as a workflow artifact and referenced here::
+
+        image: ${drugflow_sif}
+
+    That keeps the site-specific absolute path in the workflow's artifacts
+    block, next to every other path an operator has to set, instead of buried
+    in an executor field.
     """
 
     exe: str = "singularity"
@@ -159,6 +170,7 @@ class SingularityExecutor(BaseExecutor):
         working_dir = (
             self._sub(self.working_dir, task) if self.working_dir else None
         )
+        image = self._sub(self.image, task)
 
         parts = [shlex.quote(self.exe), "exec"]
         if self.nv:
@@ -171,7 +183,7 @@ class SingularityExecutor(BaseExecutor):
             parts += ["--pwd", shlex.quote(working_dir)]
         parts += [shlex.quote(arg) for arg in self.extra_args]
         parts += [
-            shlex.quote(self.image),
+            shlex.quote(image),
             "/bin/sh",
             "-c",
             shlex.quote(prepared_command),
@@ -197,7 +209,9 @@ class SingularityExecutor(BaseExecutor):
             )
             % {
                 "task_id": task.id,
-                "image": self.image,
+                # Resolved, not raw: logging "${drugflow_sif}" when the run
+                # fails on a missing image helps nobody.
+                "image": self._sub(self.image, task),
                 "command": prepared_command,
             }
         )
