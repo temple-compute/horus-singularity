@@ -50,7 +50,7 @@ Registered under `kind = "singularity"`. Only accepted when the task's runtime i
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `image` | `str` | required | Path to the `.sif` image on the target (e.g. `/opt/images/boltz.sif`) |
+| `image` | `str` | required | Path to the `.sif` image on the target (e.g. `/opt/images/boltz.sif`); accepts `${artifact}` placeholders |
 | `exe` | `str` | `"singularity"` | Container CLI to invoke — `singularity` or `apptainer` |
 | `binds` | `dict[str, str]` | `{}` | Bind mounts as `host_path → container_path`; both sides accept `${artifact}` placeholders |
 | `nv` | `bool` | `False` | Add `--nv` to expose the NVIDIA driver stack inside the container |
@@ -58,8 +58,8 @@ Registered under `kind = "singularity"`. Only accepted when the task's runtime i
 | `working_dir` | `str \| None` | `None` | Working directory inside the container (`--pwd`); accepts `${artifact}` placeholders |
 | `extra_args` | `list[str]` | `[]` | Extra flags passed verbatim before the image path |
 
-`binds`, `env`, and `working_dir` are rendered with the same `$id` / `${id}` /
-`${id.attr}` / `${task.attr}` substitution as a `command` string (see
+`image`, `binds`, `env`, and `working_dir` are rendered with the same `$id` /
+`${id}` / `${id.attr}` / `${task.attr}` substitution as a `command` string (see
 `horus_builtin.runtime.substitution`), so an explicit bind can reference the
 task's own artifacts:
 
@@ -67,6 +67,26 @@ task's own artifacts:
 binds:
   "${protein}": /data/protein.pdb
 ```
+
+`image` accepting placeholders is the notable difference from `horus-docker`,
+whose `image` is a registry tag with nothing to substitute. A Singularity image
+is an ordinary file, so it can be declared as a workflow artifact and referenced
+by id:
+
+```yaml
+artifacts:
+  - id: drugflow_sif
+    kind: file
+    path: /scratch/me/drugflow.sif   # the one site-specific path
+# ...
+executor:
+  kind: singularity
+  image: ${drugflow_sif}
+```
+
+That keeps the absolute, site-specific path in the workflow's artifacts block —
+next to every other path an operator has to set — instead of buried in an
+executor field.
 
 ### Behaviour
 

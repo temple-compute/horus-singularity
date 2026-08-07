@@ -9,7 +9,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: horus_singularity VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-08-07 14:07+0200\n"
+"POT-Creation-Date: 2026-08-07 21:58+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -24,21 +24,21 @@ msgid ""
 "target."
 msgstr ""
 
-#: src/horus_singularity/executor/singularity.py:188
+#: src/horus_singularity/executor/singularity.py:200
 msgid "SingularityExecutor only supports CommandRuntime runtimes."
 msgstr ""
 
-#: src/horus_singularity/executor/singularity.py:195
+#: src/horus_singularity/executor/singularity.py:207
 #, python-format
 msgid "Running task %(task_id)s in Singularity image %(image)s: %(command)s"
 msgstr ""
 
-#: src/horus_singularity/executor/singularity.py:237
+#: src/horus_singularity/executor/singularity.py:251
 #, python-format
 msgid "Container for task %(task_id)s exited with code %(code)s. Output: %(out)s"
 msgstr ""
 
-#: src/horus_singularity/executor/singularity.py:248
+#: src/horus_singularity/executor/singularity.py:262
 #, python-format
 msgid "Container exited with code %(code)s"
 msgstr ""
