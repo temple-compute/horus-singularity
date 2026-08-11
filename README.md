@@ -96,7 +96,7 @@ executor field.
    <exe> exec [--nv] [--env K=V]… [--bind host:container]… [--pwd dir] [extra_args…] <image> /bin/sh -c <command>
    ```
    Every interpolated value is passed through `shlex.quote`.
-3. The parent directory of every task input/output artifact is auto-bound at the same path inside the container (`host_dir → host_dir`), as is `task.side_artifacts_dir`. Explicit `binds` entries win on conflict.
+3. The parent directory of every task input/output artifact is auto-bound at the same path inside the container (`host_dir → host_dir`), as is `task.side_artifacts_dir`. The directory is the artifact's location **on the task's target** (`target.path_on_target`), which for a remapping target (SSH, Slurm over SSH) is not the orchestrator's run directory. Explicit `binds` entries win on conflict.
 4. `HORUS_SIDE_ARTIFACTS_DIR` is set both inside the container and on the host process, so scripts can drop side products where the runtime collects them.
 5. The command runs on the task target via `target.run_command(...)`; stdout is logged at `INFO`, stderr at `WARNING`.
 6. A non-zero exit code raises `TaskExecutionError`.

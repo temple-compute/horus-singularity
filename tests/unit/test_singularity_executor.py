@@ -52,6 +52,21 @@ def _make_mock_target(proc: AsyncMock | None = None) -> MagicMock:
     return target
 
 
+def _make_remapping_target(proc: AsyncMock | None = None) -> MagicMock:
+    """
+    Return a mock target that relocates artifacts, like a remote one.
+
+    Mirrors ``SSHTarget.path_on_target``: artifacts are copied to
+    ``<working_directory>/<name>`` on the far host, so the orchestrator's own
+    path for an artifact says nothing about where it lives on the target.
+    """
+    target = _make_mock_target(proc)
+    target.path_on_target = lambda artifact: (
+        f"{_WORKDIR}/{Path(artifact.path).name}"
+    )
+    return target
+
+
 @pytest.mark.unit
 class TestSingularityExecutorRegistration:
     """Verify SingularityExecutor registers via the horus.executor group."""
@@ -172,6 +187,36 @@ class TestSingularityExecutorExecute:
         cmd = mock_target.run_command.call_args[0][0]
         assert "/data/results:/mnt/custom" in cmd
         assert "/data/results:/data/results" not in cmd
+
+    @pytest.mark.asyncio
+    async def test_auto_binds_use_target_paths_not_orchestrator_paths(
+        self, horus_context: HorusContext
+    ) -> None:
+        """
+        On a remapping target, auto-binds must name the target's directory.
+
+        Outputs are never transferred before execution, so their path is
+        still the orchestrator's run directory. Binding that path made
+        Singularity abort with `mount source ... doesn't exist` on the
+        compute node.
+        """
+        del horus_context
+        run_dir = "/tmp/tc-orchestrator/d53a38af"
+        executor = SingularityExecutor(image=_IMAGE)
+        task = HorusTask(
+            id="test-task",
+            name="test_task",
+            executor=executor,
+            runtime=CommandRuntime(command="true"),
+            inputs=[FileArtifact(id="inp", path=Path(f"{run_dir}/in.sdf"))],
+            outputs=[FileArtifact(id="out", path=Path(f"{run_dir}/out.sdf"))],
+        )
+        mock_target = _make_remapping_target()
+        with patch.object(task, "target", mock_target):
+            await executor._execute(task)
+        cmd = mock_target.run_command.call_args[0][0]
+        assert f"{_WORKDIR}:{_WORKDIR}" in cmd
+        assert run_dir not in cmd
 
     @pytest.mark.asyncio
     async def test_execute_nonzero_exit_raises(

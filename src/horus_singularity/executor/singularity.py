@@ -10,6 +10,7 @@ Singularity/Apptainer executor implementation for Horus.
 
 import asyncio
 import shlex
+from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from horus_builtin.runtime.command import CommandRuntime
@@ -84,7 +85,8 @@ class SingularityExecutor(BaseExecutor):
           "${protein}": /data/protein.pdb
 
     Unknown placeholders are left as-is. Explicit entries here take precedence
-    over the auto-bound artifact parent dirs (see
+    over the auto-bound artifact parent dirs, i.e. the parent of every input
+    and output *as it exists on the task's target* (see
     :meth:`_singularity_exec_cmd`).
 
     Note that Singularity performs **no path translation**: unless you bind a
@@ -149,8 +151,19 @@ class SingularityExecutor(BaseExecutor):
         auto_binds: dict[str, str] = {}
         env = self._sub_dict(self.env, task)
         if task is not None:
+            # The bind source is a path on the *target*, so it has to come
+            # from `path_on_target`, not from `artifact.path`. The latter is
+            # anchored to the orchestrator's run directory, which on a
+            # remapping target (SSH, Slurm over SSH) names a directory that
+            # does not exist there: Singularity does no path translation and
+            # aborts with `mount source ... doesn't exist` before the command
+            # ever runs. Outputs make this unavoidable: they are never
+            # transferred before execution, so their `path` is still the
+            # orchestrator's. `path_on_target` returns `artifact.path`
+            # unchanged for co-located targets, so local runs are unaffected.
             for artifact in (*task.inputs, *task.outputs):
-                host_dir = str(artifact.path.parent)
+                on_target = PurePosixPath(task.target.path_on_target(artifact))
+                host_dir = on_target.parent.as_posix()
                 auto_binds[host_dir] = host_dir
             # The container is a different mount namespace: the side-artifacts
             # directory the runtime collects from must be reachable at the same
