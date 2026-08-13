@@ -8,6 +8,7 @@
 
 import asyncio
 import shlex
+from collections.abc import AsyncIterator, Callable
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -29,13 +30,35 @@ _WORKDIR = "/work"
 def _make_mock_proc(
     returncode: int = 0, stdout: bytes = b"", stderr: bytes = b""
 ) -> AsyncMock:
-    """Return an AsyncMock ChannelProcess."""
+    """
+    Return an AsyncMock ChannelProcess.
+
+    ``stream`` is a real async generator rather than a mock: the executor
+    consumes it through ``aclosing``, which needs a genuine ``aclose``.
+    """
     proc = AsyncMock()
     proc.returncode = returncode
     proc.communicate = AsyncMock(return_value=(stdout, stderr))
     proc.wait = AsyncMock(return_value=returncode)
     proc.kill = MagicMock()
+
+    async def _stream() -> AsyncIterator[tuple[str, bytes]]:
+        for name, blob in (("stdout", stdout), ("stderr", stderr)):
+            for line in blob.splitlines():
+                yield name, line
+
+    proc.stream = _stream
     return proc
+
+
+def _cancelling_stream() -> Callable[[], AsyncIterator[tuple[str, bytes]]]:
+    """A ``stream`` that raises CancelledError as soon as it is consumed."""
+
+    async def _stream() -> AsyncIterator[tuple[str, bytes]]:
+        raise asyncio.CancelledError
+        yield  # pragma: no cover - unreachable, makes this a generator
+
+    return _stream
 
 
 def _make_mock_target(proc: AsyncMock | None = None) -> MagicMock:
@@ -367,6 +390,55 @@ class TestSingularityExecutorExecute:
         logger.log.warning.assert_called_once_with("careful")
 
     @pytest.mark.asyncio
+    async def test_output_is_streamed_not_buffered(
+        self, horus_context: HorusContext
+    ) -> None:
+        """
+        Output comes off the stream, never from the blocking drain.
+
+        Apptainer reports SIF pull progress while it downloads, which can take
+        many minutes; ``communicate()`` withheld all of it until exit and made
+        a slow image fetch look like a hang.
+        """
+        del horus_context
+        executor = SingularityExecutor(image=_IMAGE)
+        task = self._make_task(executor, command="true")
+        proc = _make_mock_proc(stderr=b"INFO: Converting OCI blobs\n")
+        with patch.object(task, "target", _make_mock_target(proc)):
+            with patch(
+                "horus_singularity.executor.singularity.horus_logger"
+            ) as logger:
+                await executor._execute(task)
+
+        proc.communicate.assert_not_awaited()
+        logger.log.warning.assert_called_once_with(
+            "INFO: Converting OCI blobs"
+        )
+
+    @pytest.mark.asyncio
+    async def test_failure_quotes_the_output_tail(
+        self, horus_context: HorusContext
+    ) -> None:
+        """A failure still reports what the container said before dying."""
+        del horus_context
+        executor = SingularityExecutor(image=_IMAGE)
+        task = self._make_task(executor, command="false")
+        mock_target = _make_mock_target(
+            _make_mock_proc(returncode=1, stderr=b"FATAL: image not found")
+        )
+        with patch.object(task, "target", mock_target):
+            with patch(
+                "horus_singularity.executor.singularity.horus_logger"
+            ) as logger:
+                with pytest.raises(TaskExecutionError):
+                    await executor._execute(task)
+
+        logged = " ".join(
+            str(call) for call in logger.log.error.call_args_list
+        )
+        assert "FATAL: image not found" in logged
+
+    @pytest.mark.asyncio
     async def test_cancelled_execution_kills_and_clears_proc(
         self, horus_context: HorusContext
     ) -> None:
@@ -380,7 +452,7 @@ class TestSingularityExecutorExecute:
         executor = SingularityExecutor(image=_IMAGE)
         task = self._make_task(executor, command="true")
         proc = _make_mock_proc()
-        proc.communicate = AsyncMock(side_effect=asyncio.CancelledError)
+        proc.stream = _cancelling_stream()
         mock_target = _make_mock_target(proc)
         with patch.object(task, "target", mock_target):
             with pytest.raises(asyncio.CancelledError):
