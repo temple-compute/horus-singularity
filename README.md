@@ -46,6 +46,10 @@ pyproject.toml
 
 Registered under `kind = "singularity"`. Only accepted when the task's runtime is a `CommandRuntime`.
 
+### ApptainerExecutor
+
+Registered under `kind = "apptainer"`. Same fields and behaviour, with `exe` defaulting to `"apptainer"`. Use it for new workflows: SingularityCE reached end of life on 2026-10-25 and Apptainer is the maintained successor. `kind: singularity` keeps working, since Apptainer also ships a `singularity` command.
+
 ### Fields
 
 | Field | Type | Default | Description |
@@ -80,7 +84,7 @@ artifacts:
     path: /scratch/me/drugflow.sif   # the one site-specific path
 # ...
 executor:
-  kind: singularity
+  kind: apptainer
   image: ${drugflow_sif}
 ```
 

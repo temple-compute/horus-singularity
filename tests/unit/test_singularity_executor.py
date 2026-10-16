@@ -21,7 +21,10 @@ from horus_runtime.core.executor.base import BaseExecutor
 from horus_runtime.core.task.exceptions import TaskExecutionError
 from horus_runtime.settings import runtime_settings
 
-from horus_singularity.executor.singularity import SingularityExecutor
+from horus_singularity.executor.singularity import (
+    ApptainerExecutor,
+    SingularityExecutor,
+)
 
 _IMAGE = "/opt/images/boltz.sif"
 _WORKDIR = "/work"
@@ -106,6 +109,12 @@ class TestSingularityExecutorRegistration:
     def test_runtimes_filter(self) -> None:
         """CommandRuntime must be the accepted runtime type."""
         assert CommandRuntime in SingularityExecutor.runtimes
+
+    def test_apptainer_kind(self) -> None:
+        """The apptainer kind resolves to ApptainerExecutor."""
+        assert BaseExecutor.registry["apptainer"] is ApptainerExecutor
+        cmd = ApptainerExecutor(image=_IMAGE)._singularity_exec_cmd("true")
+        assert shlex.split(cmd)[:2] == ["apptainer", "exec"]
 
 
 @pytest.mark.unit
