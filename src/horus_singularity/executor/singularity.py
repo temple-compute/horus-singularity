@@ -323,3 +323,21 @@ class SingularityExecutor(BaseExecutor):
         if proc.returncode is None:
             proc.kill()
             await proc.wait()
+
+
+class ApptainerExecutor(SingularityExecutor):
+    """
+    :class:`SingularityExecutor` that invokes ``apptainer``.
+
+    SingularityCE reached end of life on 2026-10-25; Apptainer is its
+    maintained successor and runs the same SIF images. ``kind: singularity``
+    keeps working (Apptainer ships a ``singularity`` command too).
+    """
+
+    kind: str = "apptainer"
+    kind_name: ClassVar[str] = "Apptainer Executor"
+    kind_description: ClassVar[str] = _(
+        "Executes a command inside an Apptainer container on the task target."
+    )
+
+    exe: str = "apptainer"

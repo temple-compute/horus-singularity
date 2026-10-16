@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: horus_singularity VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-08-07 21:58+0200\n"
+"POT-Creation-Date: 2026-10-16 10:30+0200\n"
 "PO-Revision-Date: 2026-07-22 23:32+0200\n"
 "Last-Translator: Temple Compute\n"
 "Language: en\n"
@@ -19,7 +19,7 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.18.0\n"
 
-#: src/horus_singularity/executor/singularity.py:44
+#: src/horus_singularity/executor/singularity.py:81
 msgid ""
 "Executes a command inside a Singularity/Apptainer container on the task "
 "target."
@@ -27,22 +27,26 @@ msgstr ""
 "Executes a command inside a Singularity/Apptainer container on the task "
 "target."
 
-#: src/horus_singularity/executor/singularity.py:200
+#: src/horus_singularity/executor/singularity.py:249
 msgid "SingularityExecutor only supports CommandRuntime runtimes."
 msgstr "SingularityExecutor only supports CommandRuntime runtimes."
 
-#: src/horus_singularity/executor/singularity.py:207
+#: src/horus_singularity/executor/singularity.py:256
 #, python-format
 msgid "Running task %(task_id)s in Singularity image %(image)s: %(command)s"
 msgstr "Running task %(task_id)s in Singularity image %(image)s: %(command)s"
 
-#: src/horus_singularity/executor/singularity.py:251
+#: src/horus_singularity/executor/singularity.py:294
 #, python-format
 msgid "Container for task %(task_id)s exited with code %(code)s. Output: %(out)s"
 msgstr "Container for task %(task_id)s exited with code %(code)s. Output: %(out)s"
 
-#: src/horus_singularity/executor/singularity.py:262
+#: src/horus_singularity/executor/singularity.py:305
 #, python-format
 msgid "Container exited with code %(code)s"
 msgstr "Container exited with code %(code)s"
+
+#: src/horus_singularity/executor/singularity.py:340
+msgid "Executes a command inside an Apptainer container on the task target."
+msgstr "Executes a command inside an Apptainer container on the task target."
 
