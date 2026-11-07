@@ -19,7 +19,10 @@ from horus_builtin.runtime.command import CommandRuntime
 from horus_builtin.runtime.substitution import substitute
 from horus_runtime.core.executor.base import BaseExecutor, RuntimeFilterType
 from horus_runtime.core.target.channel import ChannelProcess
-from horus_runtime.core.task.exceptions import TaskExecutionError
+from horus_runtime.core.task.exceptions import (
+    CommandFailedError,
+    TaskExecutionError,
+)
 from horus_runtime.logging import horus_logger
 from horus_runtime.settings import runtime_settings
 from pydantic import Field, PrivateAttr
@@ -286,9 +289,9 @@ class SingularityExecutor(BaseExecutor):
                 proc.kill()
                 await proc.wait()
                 raise
-            await proc.wait()
+            code = await proc.wait()
 
-            if proc.returncode != 0:
+            if code != 0:
                 horus_logger.log.error(
                     _(
                         "Container for task %(task_id)s exited with code "
@@ -296,14 +299,16 @@ class SingularityExecutor(BaseExecutor):
                     )
                     % {
                         "task_id": task.id,
-                        "code": proc.returncode,
+                        "code": code,
                         "out": output_tail,
                     }
                 )
 
-                raise TaskExecutionError(
-                    _("Container exited with code %(code)s")
-                    % {"code": proc.returncode}
+                # CommandFailedError carries the exit code, so a map can
+                # drop an item on one of its drop_exit_codes.
+                raise CommandFailedError(
+                    _("Container exited with code %(code)s") % {"code": code},
+                    exit_code=code,
                 )
         finally:
             self._proc = None

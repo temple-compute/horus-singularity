@@ -18,7 +18,10 @@ from horus_builtin.runtime.command import CommandRuntime
 from horus_builtin.task.horus_task import HorusTask
 from horus_runtime.context import HorusContext
 from horus_runtime.core.executor.base import BaseExecutor
-from horus_runtime.core.task.exceptions import TaskExecutionError
+from horus_runtime.core.task.exceptions import (
+    CommandFailedError,
+    TaskExecutionError,
+)
 from horus_runtime.settings import runtime_settings
 
 from horus_singularity.executor.singularity import (
@@ -263,9 +266,10 @@ class TestSingularityExecutorExecute:
         )
         with patch.object(task, "target", mock_target):
             with pytest.raises(
-                TaskExecutionError, match="Container exited with code 1"
-            ):
+                CommandFailedError, match="Container exited with code 1"
+            ) as err:
                 await executor._execute(task)
+        assert err.value.exit_code == 1
 
     @pytest.mark.asyncio
     async def test_placeholders_substituted_in_binds_env_and_pwd(
