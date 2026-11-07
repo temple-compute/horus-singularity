@@ -164,7 +164,7 @@ wheels = [
 
 [[package]]
 name = "horus-runtime"
-version = "0.3.2"
+version = "0.9.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
@@ -175,9 +175,9 @@ dependencies = [
     { name = "pyyaml" },
     { name = "rich" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/51/93/efe0e93af92117813991a86264d1449965028fbe9f1218be98ed784e24c2/horus_runtime-0.3.2.tar.gz", hash = "sha256:e8bebae975345fe44ee9d8f262520a987100a5fb2f6d3ef8c590b68d1474badf", size = 271259, upload-time = "2026-08-03T08:40:11.833Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/3c/71/77ed8a1a59b520da212d5528ad8eb398423dc499aee1cbf095bc2560e309/horus_runtime-0.9.0.tar.gz", hash = "sha256:02dc103aad16014e03c21261c35d0382def9825ae78c7d0b26dfb3a3fc0a9a02", size = 447722, upload-time = "2026-11-07T09:30:24.476Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/87/1d/f6b550a8dbfc21f39803ca539cea5a3a68d2d1da8390c0ffeef34db38bb6/horus_runtime-0.3.2-py3-none-any.whl", hash = "sha256:fe2cdd05f7996a97d2ba1223dd678baa9f48bcde83a29eac0c99b0fcf23a6c4c", size = 268345, upload-time = "2026-08-03T08:40:10.319Z" },
+    { url = "https://files.pythonhosted.org/packages/fd/3d/c4cbd9bb130b082aaecf865a0217e5c4dc5685e01acbb7424cea2456b5d0/horus_runtime-0.9.0-py3-none-any.whl", hash = "sha256:e313ad94fad1e6cc8439a78d50c8354e8252bd9775b669f681f3f716dac81fa9", size = 362806, upload-time = "2026-11-07T09:30:22.726Z" },
 ]
 
 [[package]]
@@ -202,7 +202,7 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "horus-runtime", specifier = ">=0.3.0" }]
+requires-dist = [{ name = "horus-runtime", specifier = ">=0.9.0" }]
 
 [package.metadata.requires-dev]
 dev = [
